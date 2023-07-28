@@ -5,12 +5,16 @@ import { Repository } from 'typeorm';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { JwtService } from '@nestjs/jwt';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
+import Redis from 'ioredis';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 
 @Injectable()
 export class ConversationService {
   constructor(
     @InjectRepository(ConversationEntity)
     private conversationRepository: Repository<ConversationEntity>,
+
+    @InjectRedis() private readonly redis: Redis,
 
     private readonly searchService: ElasticsearchService,
 
@@ -29,9 +33,11 @@ export class ConversationService {
       throw new UnauthorizedException('incorrect token');
     }
 
-    return this.conversationRepository.find({
+    const conversation = await this.conversationRepository.find({
       where: { message: { user_id: checkLogin.id } },
     });
+    await this.redis.set('conversation', JSON.stringify(conversation));
+    return conversation;
   }
 
   async findOneById(id: number): Promise<ConversationEntity> {

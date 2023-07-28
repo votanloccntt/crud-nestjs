@@ -11,11 +11,12 @@ import { OauthEntity } from './oauth/entities/oauth.entity';
 import { UserEntity } from './user/entities/user.entity';
 import { OauthModule } from './oauth/oauth.module';
 import { UserModule } from './user/user.module';
-import { RedisModule } from '@nestjs-modules/ioredis';
 import { GatewayModule } from './gateway/gateway.module';
 import { SearchModule } from './search/search.module';
 import { FriendModule } from './friend/friend.module';
 import { FriendEntity } from './friend/entities/friend.entity';
+import { RedisModule } from '@nestjs-modules/ioredis';
+import { ConnectionEntity } from './gateway/entities/connection.entity';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { FriendEntity } from './friend/entities/friend.entity';
         MessageEntity,
         OauthEntity,
         UserEntity,
+        ConnectionEntity,
       ],
     }),
     GatewayModule,

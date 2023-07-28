@@ -8,8 +8,8 @@ export class AppController {
 
   @Get()
   async getHello() {
-    await this.redis.set('key', 'Redis data!');
-    const redisData = await this.redis.get('key');
-    return { redisData };
+    const redisData = await this.redis.get('conversation');
+    const result = JSON.parse(redisData);
+    return { result };
   }
 }
