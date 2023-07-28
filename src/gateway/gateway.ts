@@ -11,12 +11,16 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Repository } from 'typeorm';
 import { ConnectionEntity } from './entities/connection.entity';
+import { MessageEntity } from 'src/message/entities/message.entity';
 
 @WebSocketGateway()
 export class MyGateway implements OnModuleInit {
   constructor(
     @InjectRepository(ConnectionEntity)
     private connectionRepository: Repository<ConnectionEntity>,
+
+    @InjectRepository(MessageEntity)
+    private messageRepository: Repository<MessageEntity>,
 
     private readonly jwtService: JwtService,
   ) {}
@@ -26,37 +30,38 @@ export class MyGateway implements OnModuleInit {
 
   socket: Socket;
 
-  handleConnection(@ConnectedSocket() client: any) {
+  async handleConnection(@ConnectedSocket() client: any) {
     const authorizationHeader = client.handshake.headers.authorization;
-    const checkLogin: any = this.jwtService.decode(authorizationHeader);
-    if (!checkLogin) {
+    const user: any = this.jwtService.decode(authorizationHeader);
+
+    client.data.user_id = user.id;
+
+    if (!user) {
       console.log('incorrect token');
     }
 
-    this.connectionRepository.save({
-      user_id: checkLogin.id,
+    await this.connectionRepository.save({
+      user_id: user.id,
       socket_id: client.id,
       conversation_id: 0,
     });
-
-    // console.log(` ${client.id}  ${client.handshake?.query?.deviceId}`);
+    console.log('Đã lưu connection vào database');
   }
+
   @SubscribeMessage('join')
-  onJoin(
-    @MessageBody() conversationId: string,
-    @ConnectedSocket() client: any,
-  ) {
+  onJoin(@MessageBody() body: any, @ConnectedSocket() client: Socket) {
+    const { conversationId } = body;
+
     client.join(conversationId);
 
-    this.server.to(conversationId).emit('onjoin', 'Da join phong');
+    this.server
+      .to(conversationId)
+      .emit('onjoin', `Đã vào phòng ${conversationId}`);
   }
 
-  handleDisconnect(@ConnectedSocket() client: any) {
-    // console.log(
-    //   `user ${client.user.id} with socket ${client.id} with device ${client.handshake?.query?.deviceId} DISCONNECTED`,
-    // );
-
-    client.leave('1');
+  handleDisconnect(@ConnectedSocket() client: any, @MessageBody() body: any) {
+    const { conversationId } = body;
+    client.leave(conversationId);
   }
 
   onModuleInit() {
@@ -66,10 +71,12 @@ export class MyGateway implements OnModuleInit {
   }
 
   @SubscribeMessage('newMessage')
-  onNewMessage(@MessageBody() body: any) {
-    this.server.emit('onMessage', {
-      msg: 'New Message',
-      content: body,
+  onNewMessage(@MessageBody() body: any, @ConnectedSocket() client: Socket) {
+    this.server.to(body.conversationId).emit('onMessage', body.message);
+    this.messageRepository.save({
+      conversation_id: body.conversationId,
+      user_id: client.data.user_id,
+      message: body.message,
     });
   }
 }
