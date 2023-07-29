@@ -4,17 +4,16 @@ import { ConversationEntity } from './entities/conversation.entity';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { AuthGuard } from 'src/oauth/auth.guard';
 
+@UseGuards(AuthGuard)
 @Controller('conversation')
 export class ConversationController {
   constructor(private readonly conversationService: ConversationService) {}
 
-  @UseGuards(AuthGuard)
   @Get()
   async findAll(@Req() request: Request): Promise<ConversationEntity[]> {
     return this.conversationService.findAll(request);
   }
 
-  @UseGuards(AuthGuard)
   @Post()
   async create(
     @Req() request: Request,

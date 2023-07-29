@@ -14,12 +14,16 @@ import { ConnectionEntity } from './entities/connection.entity';
 import { MessageEntity } from 'src/message/entities/message.entity';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
+import { ConversationEntity } from 'src/conversation/entities/conversation.entity';
 
 @WebSocketGateway()
 export class MyGateway implements OnModuleInit {
   constructor(
     @InjectRepository(ConnectionEntity)
     private connectionRepository: Repository<ConnectionEntity>,
+
+    @InjectRepository(ConversationEntity)
+    private conversationRepository: Repository<ConversationEntity>,
 
     @InjectRepository(MessageEntity)
     private messageRepository: Repository<MessageEntity>,
@@ -46,7 +50,16 @@ export class MyGateway implements OnModuleInit {
     console.log(`${user.email} Đã online`);
 
     client.data.user_id = user.id;
+
     client.data.user_email = user.email;
+
+    const checkConnection = await this.connectionRepository.findOne({
+      where: { user_id: user.id },
+    });
+
+    if (checkConnection) {
+      await this.connectionRepository.delete(checkConnection.id);
+    }
 
     const connection = await this.connectionRepository.save({
       user_id: user.id,
@@ -59,10 +72,15 @@ export class MyGateway implements OnModuleInit {
 
   async handleDisconnect(@ConnectedSocket() client: any) {
     console.log(`${client.data.user_email} Đã offline`);
+
     const redisData = await this.redis.get(client.data.user_id);
+
     const result = JSON.parse(redisData);
 
     await this.connectionRepository.delete(result.id);
+
+    await this.redis.del(client.data.user_id);
+
     client.leave(client.data.conversation_id);
   }
 
@@ -95,12 +113,23 @@ export class MyGateway implements OnModuleInit {
   }
 
   @SubscribeMessage('newMessage')
-  onNewMessage(@MessageBody() body: any, @ConnectedSocket() client: Socket) {
+  async onNewMessage(
+    @MessageBody() body: any,
+    @ConnectedSocket() client: Socket,
+  ) {
     this.server.to(body.conversationId).emit('onMessage', body.message);
-    this.messageRepository.save({
-      conversation_id: body.conversationId,
-      user_id: client.data.user_id,
-      message: body.message,
+
+    const checkConversation = await this.conversationRepository.findOne({
+      where: { id: body.conversationId },
     });
+    if (!checkConversation) {
+      console.log('Cuộc trò chuyện không tồn tại');
+    } else {
+      this.messageRepository.save({
+        conversation_id: body.conversationId,
+        user_id: client.data.user_id,
+        message: body.message,
+      });
+    }
   }
 }
