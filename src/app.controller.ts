@@ -10,6 +10,7 @@ export class AppController {
   async getHello() {
     const redisData = await this.redis.get('conversation');
     const result = JSON.parse(redisData);
+
     return { result };
   }
 }

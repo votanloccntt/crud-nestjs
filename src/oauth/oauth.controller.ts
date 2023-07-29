@@ -9,9 +9,6 @@ export class OauthController {
   @HttpCode(HttpStatus.OK)
   @Post(':login')
   async login(@Body() userLogin: UserEntity) {
-    return await this.oauthService.validateUser(
-      userLogin.email,
-      userLogin.password,
-    );
+    return await this.oauthService.signIn(userLogin.email, userLogin.password);
   }
 }

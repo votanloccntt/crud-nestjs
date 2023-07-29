@@ -12,6 +12,8 @@ import { Server, Socket } from 'socket.io';
 import { Repository } from 'typeorm';
 import { ConnectionEntity } from './entities/connection.entity';
 import { MessageEntity } from 'src/message/entities/message.entity';
+import Redis from 'ioredis';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 
 @WebSocketGateway()
 export class MyGateway implements OnModuleInit {
@@ -21,6 +23,8 @@ export class MyGateway implements OnModuleInit {
 
     @InjectRepository(MessageEntity)
     private messageRepository: Repository<MessageEntity>,
+
+    @InjectRedis() private readonly redis: Redis,
 
     private readonly jwtService: JwtService,
   ) {}
@@ -32,42 +36,62 @@ export class MyGateway implements OnModuleInit {
 
   async handleConnection(@ConnectedSocket() client: any) {
     const authorizationHeader = client.handshake.headers.authorization;
-    const user: any = this.jwtService.decode(authorizationHeader);
 
-    client.data.user_id = user.id;
+    const user: any = this.jwtService.decode(authorizationHeader);
 
     if (!user) {
       console.log('incorrect token');
     }
 
-    await this.connectionRepository.save({
+    console.log(`${user.email} Đã online`);
+
+    client.data.user_id = user.id;
+    client.data.user_email = user.email;
+
+    const connection = await this.connectionRepository.save({
       user_id: user.id,
       socket_id: client.id,
       conversation_id: 0,
     });
-    console.log('Đã lưu connection vào database');
+
+    await this.redis.set(user.id, JSON.stringify(connection));
+  }
+
+  async handleDisconnect(@ConnectedSocket() client: any) {
+    console.log(`${client.data.user_email} Đã offline`);
+    const redisData = await this.redis.get(client.data.user_id);
+    const result = JSON.parse(redisData);
+
+    await this.connectionRepository.delete(result.id);
+    client.leave(client.data.conversation_id);
   }
 
   @SubscribeMessage('join')
-  onJoin(@MessageBody() body: any, @ConnectedSocket() client: Socket) {
+  async onJoin(@MessageBody() body: any, @ConnectedSocket() client: Socket) {
+    const redisData = await this.redis.get(client.data.user_id);
+    const result = JSON.parse(redisData);
+
     const { conversationId } = body;
+
+    await this.connectionRepository.update(result.id, {
+      ...result,
+      conversation_id: conversationId,
+    });
 
     client.join(conversationId);
 
     this.server
       .to(conversationId)
-      .emit('onjoin', `Đã vào phòng ${conversationId}`);
-  }
-
-  handleDisconnect(@ConnectedSocket() client: any, @MessageBody() body: any) {
-    const { conversationId } = body;
-    client.leave(conversationId);
+      .emit(
+        'onjoin',
+        `${client.data.user_email} Đã vào phòng ${conversationId}`,
+      );
   }
 
   onModuleInit() {
-    this.server.on('connection', (socket) => {
-      console.log(socket.id, 'Connected');
-    });
+    // this.server.on('connection', (socket) => {
+    //   console.log(socket.id, 'Connected');
+    // });
   }
 
   @SubscribeMessage('newMessage')

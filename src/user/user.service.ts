@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { UserEntity } from './entities/user.entity';
 import { encodePassword } from 'src/bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 
 @Injectable()
 export class UserService {
@@ -13,10 +13,6 @@ export class UserService {
     private userRepository: Repository<UserEntity>,
     private readonly searchService: ElasticsearchService,
   ) {}
-
-  findAll(): Promise<UserEntity[]> {
-    return this.userRepository.find();
-  }
 
   private haversineDistance(
     lat1: number,
@@ -42,10 +38,12 @@ export class UserService {
     return distanceInKm;
   }
 
-  async findByLatLng(id: number): Promise<UserEntity[]> {
-    const currentUser = await this.userRepository.findOne({ where: { id } });
+  async findByLatLng(request: any): Promise<UserEntity[]> {
+    const currentUser = await this.userRepository.findOne({
+      where: { id: request.user.id },
+    });
     if (!currentUser || !currentUser.lat || !currentUser.lng) {
-      console.log('User không tồn tại');
+      throw new HttpException('Người dùng không tồn tại', HttpStatus.NOT_FOUND);
     }
 
     const allUsers = await this.userRepository.find();
@@ -76,12 +74,5 @@ export class UserService {
       document: { ...newuser },
     });
     return currentUser;
-  }
-
-  async findOneByEmail(email: string): Promise<UserEntity | undefined> {
-    return this.userRepository.findOne({ where: { email } });
-  }
-  async findOneById(id: number): Promise<UserEntity | undefined> {
-    return this.userRepository.findOne({ where: { id } });
   }
 }

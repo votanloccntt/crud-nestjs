@@ -18,7 +18,7 @@ export class OauthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async validateUser(email: string, password: string) {
+  async signIn(email: string, password: string) {
     const user = await this.userRepository.findOne({ where: { email } });
     const checkPwd = comparePasswords(password, user.password);
 
